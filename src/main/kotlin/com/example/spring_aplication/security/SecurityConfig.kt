@@ -12,6 +12,13 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 
 @Configuration
 class SecurityConfig(private val jwtAuthFilter: JwtAuthFilter) {
+
+    private val AUTH_SWAGGER_URLS = arrayOf(
+        "/v3/api-docs/**",
+        "/swagger-ui/**",
+        "/swagger-ui/**"
+    )
+
     @Bean
     fun filterChain(httpSecurity: HttpSecurity) : SecurityFilterChain {
         return httpSecurity
@@ -19,8 +26,8 @@ class SecurityConfig(private val jwtAuthFilter: JwtAuthFilter) {
             .sessionManagement { it.sessionCreationPolicy(SessionCreationPolicy.STATELESS) }
             .authorizeHttpRequests { auth ->
                 auth
-                    .requestMatchers("/auth/**")
-                    .permitAll()
+                    .requestMatchers("/auth/**").permitAll()
+                    .requestMatchers(*AUTH_SWAGGER_URLS).permitAll()
                     .dispatcherTypeMatchers(
                         DispatcherType.ERROR,
                         DispatcherType.FORWARD
