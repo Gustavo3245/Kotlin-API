@@ -15,6 +15,8 @@ import org.springframework.web.server.ResponseStatusException
 import java.security.MessageDigest
 import java.time.Instant
 import java.util.*
+import jakarta.servlet.http.HttpServletResponse
+import jakarta.servlet.http.Cookie
 
 @Service
 class AuthService(
@@ -24,11 +26,10 @@ class AuthService(
     private val refreshTokenRepository: RefreshRepository
 ) {
     data class TokenPair(
-        val accessToken: String,
-        val refreshToken: String
+        val accessToken: String
     )
 
-    fun register(email: String, password: String): User {
+    fun register(email: String, name: String, password: String): User {
         val user = userRepository.findByEmail(email.trim())
         if(user != null) {
             throw ResponseStatusException(HttpStatus.CONFLICT, "A user with that email already exists.")
@@ -36,12 +37,14 @@ class AuthService(
         return userRepository.save(
             User(
                 email = email,
-                hashedPassword = hashEncoder.encode(password)
+                hashedPassword = hashEncoder.encode(password),
+                name = name
             )
         )
     }
 
-    fun login(email: String, password: String): TokenPair {
+    fun login(email: String, password: String, response: HttpServletResponse): TokenPair {
+
         val user = userRepository.findByEmail(email)
             ?: throw BadCredentialsException("Invalid credentials.")
 
@@ -53,15 +56,16 @@ class AuthService(
         val newRefreshToken = jwtService.generateRefressToken(user.id.toHexString())
 
         storeRefreshToken(user.id, newRefreshToken)
+        setRefreshTokenCookie(response, newRefreshToken)
 
         return TokenPair(
-            accessToken = newAccessToken,
-            refreshToken = newRefreshToken
+            accessToken = newAccessToken
         )
     }
 
     @Transactional
-    fun refresh(refreshToken: String): TokenPair {
+    fun refresh(refreshToken: String, response: HttpServletResponse): TokenPair {
+
         if(!jwtService.validateRefreshToken(refreshToken)) {
             throw ResponseStatusException(HttpStatusCode.valueOf(401), "Invalid refresh token.")
         }
@@ -84,10 +88,10 @@ class AuthService(
         val newRefreshToken = jwtService.generateRefressToken(userId)
 
         storeRefreshToken(user.id, newRefreshToken)
+        setRefreshTokenCookie(response, newRefreshToken)
 
         return TokenPair(
-            accessToken = newAccessToken,
-            refreshToken = newRefreshToken
+            accessToken = newAccessToken
         )
     }
 
@@ -109,5 +113,16 @@ class AuthService(
         val digest = MessageDigest.getInstance("SHA-256")
         val hashBytes = digest.digest(token.encodeToByteArray())
         return Base64.getEncoder().encodeToString(hashBytes)
+    }
+
+    fun setRefreshTokenCookie(response: HttpServletResponse, refreshToken: String) {
+        val expiryMs = jwtService.refreshTokenValidityMs
+        val cookie = Cookie("refresh_token", refreshToken).apply {
+            isHttpOnly = true
+            secure = true
+            path = "/auth/refresh"
+            maxAge = (expiryMs / 1000).toInt()
+        }
+        response.addCookie(cookie)
     }
 }
