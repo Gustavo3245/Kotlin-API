@@ -3,8 +3,11 @@ package com.example.spring_aplication.Controllers
 import com.example.spring_aplication.Controllers.NoteController.NoteResponse
 import com.example.spring_aplication.database.models.Note
 import com.example.spring_aplication.repository.NoteRepository
+import com.example.spring_aplication.repository.UserRepository
+import jakarta.validation.constraints.Email
 import jakarta.validation.constraints.NotBlank
 import org.bson.types.ObjectId
+import org.springframework.http.HttpStatusCode
 import org.springframework.security.core.context.SecurityContextHolder
 import org.springframework.web.bind.annotation.DeleteMapping
 import org.springframework.web.bind.annotation.GetMapping
@@ -12,7 +15,9 @@ import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestMapping
+import org.springframework.web.bind.annotation.RequestParam
 import org.springframework.web.bind.annotation.RestController
+import org.springframework.web.server.ResponseStatusException
 import java.time.Instant
 
 // https://notes.com/notes
@@ -20,7 +25,8 @@ import java.time.Instant
 @RestController
 @RequestMapping("/notes")
 class NoteController(private val repository: NoteRepository,
-                            private val noteRepository: NoteRepository) {
+                            private val noteRepository: NoteRepository,
+                            private val userRepository: UserRepository) {
 
     //DTOs
     data class  NoteRequest(
@@ -39,6 +45,7 @@ class NoteController(private val repository: NoteRepository,
         val color: Long,
         val createdAt: Instant
     )
+
     @PostMapping
     fun save(@RequestBody body: NoteRequest) : NoteResponse {
         val ownerId = SecurityContextHolder.getContext().authentication.principal as String
@@ -48,13 +55,22 @@ class NoteController(private val repository: NoteRepository,
             content = body.content,
             color = body.color,
             createdAt = Instant.now(),
-            ownerId = ObjectId(ownerId)
-        )
+            ownerId = ObjectId(ownerId))
         )
         return note.toResponse()
 
     }
 
+    @GetMapping("/email/search")
+    fun findNotesByEmail(@RequestParam name: String) : List<NoteResponse> {
+
+        val existingUserEmail = userRepository.findByName(name) ?:
+            throw ResponseStatusException(HttpStatusCode.valueOf(404), "User with that name not found")
+
+        return userRepository.findAllNotesByName(name).map {
+            it.toResponse()
+        }
+    }
 
     @GetMapping
     fun findNotesByOwnedId() : List<NoteResponse> {
